@@ -20,7 +20,6 @@ jobs:
           if [ -f "athkari_android_project2.zip" ]; then
             unzip -o "athkari_android_project2.zip" -d .
           fi
-          # التأكد من جلب الملفات للمجلد الجذر إذا كانت مضغوطة داخل مجلد
           if [ -d "athkari_android_project2" ]; then
             cp -r athkari_android_project2/. .
           fi
@@ -33,8 +32,6 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
-        with:
-          cmdline-tools-version: "11076708_latest"
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
