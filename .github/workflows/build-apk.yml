@@ -42,15 +42,10 @@ jobs:
           echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
           echo "$ANDROID_HOME/platform-tools" >> $GITHUB_PATH
 
-      - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v3
-        with:
-          gradle-version: '8.5'
-
       - name: Build Debug APK
         run: |
-          chmod +x gradlew || true
-          gradle assembleDebug
+          gradle wrapper --gradle-version 8.5
+          ./gradlew assembleDebug
           cp app/build/outputs/apk/debug/app-debug.apk Athkari.apk
 
       - name: Upload APK Artifact
