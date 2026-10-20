@@ -5,9 +5,6 @@ on:
     branches: [ "main", "master" ]
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -15,25 +12,52 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Unpack and Locate Project Directory
+      # فك ضغط الملف من مساره الصحيح داخل مجلد سير العمل
+      - name: Unzip Project
         run: |
-          if [ -f "athkari_android_project2.zip" ]; then
-            unzip -o "athkari_android_project2.zip" -d .
-          fi
-          # البحث عن المجلد الصحيح الذي يحتوي على ملف الإعدادات
-          if [ -d "athkari_android_project2" ]; then
-            cd athkari_android_project2
-          elif [ -f "settings.gradle.kts" ]; then
-            echo "Already in root"
+          # البحث عن ملف ZIP داخل مجلد .github/workflows وفك ضغطه
+          ZIP_FILE=$(find .github/workflows -name "*.zip" | head -n 1)
+          if [ -n "$ZIP_FILE" ]; then
+            echo "Found zip file: $ZIP_FILE"
+            unzip -o "$ZIP_FILE" -d .
           else
-            # العثور على أي مجلد فرعي يحتوي على المشروع
-            SUBDIR=$(find . -maxdepth 2 -name "settings.gradle.kts" -exec dirname {} \; | head -n 1)
-            if [ -n "$SUBDIR" ]; then
-              cd "$SUBDIR"
+            echo "Error: No ZIP file found in .github/workflows"
+            exit 1
+          fi
+
+      # إذا كان المشروع داخل مجلد فرعي، انقل محتوياته إلى الجذر
+      - name: Move Project Files to Root (if necessary)
+        run: |
+          # قائمة بالملفات الأساسية التي يجب أن تكون في الجذر
+          CORE_FILES=("build.gradle.kts" "settings.gradle.kts" "gradlew" "gradle.properties")
+          
+          # التحقق مما إذا كانت الملفات موجودة في الجذر
+          NEEDS_MOVE=false
+          for file in "${CORE_FILES[@]}"; do
+            if [ ! -f "$file" ]; then
+              NEEDS_MOVE=true
+              break
             fi
-          end
-          pwd
-          ls -la
+          done
+          
+          # إذا لم تكن الملفات في الجذر، ابحث عن المجلد الذي يحتوي عليها وانقلها
+          if [ "$NEEDS_MOVE" = true ]; then
+            echo "Project files not in root. Searching for them..."
+            # البحث عن مجلد يحتوي على build.gradle.kts
+            PROJECT_DIR=$(find . -maxdepth 2 -name "build.gradle.kts" -not -path "./.github/*" | head -n 1 | xargs -r dirname)
+            if [ -n "$PROJECT_DIR" ]; then
+              echo "Found project files in: $PROJECT_DIR"
+              # نقل جميع المحتويات (بما في ذلك الملفات المخفية) إلى الجذر
+              mv "$PROJECT_DIR"/* .
+              mv "$PROJECT_DIR"/.[!.]* . 2>/dev/null || true
+              rm -rf "$PROJECT_DIR"
+            else
+              echo "Error: Could not find project directory."
+              exit 1
+            fi
+          else
+            echo "Project files are already in the root."
+          fi
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -41,29 +65,20 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Install Android SDK manually
-        run: |
-          export ANDROID_HOME=$HOME/android-sdk
-          mkdir -p $ANDROID_HOME/cmdline-tools
-          wget https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline-tools.zip
-          unzip -q cmdline-tools.zip
-          mv cmdline-tools $ANDROID_HOME/cmdline-tools/latest
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_HOME --licenses
-          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --sdk_root=$ANDROID_HOME "platform-tools" "platforms;android-34" "build-tools;34.0.0"
-          echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
-          echo "$ANDROID_HOME/platform-tools" >> $GITHUB_PATH
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
 
       - name: Build Debug APK
-        run: |
-          # الدخول للمجلد الصحيح في حال تم تغييره
-          if [ -d "athkari_android_project2" ]; then
-            cd athkari_android_project2
-          fi
-          gradle wrapper --gradle-version 8.5
-          ./gradlew assembleDebug
+        run: ./gradlew assembleDebug
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Athkari-APK
-          path: '**/app/build/outputs/apk/debug/app-debug.apk'
+          path: app/build/outputs/apk/debug/app-debug.apk
