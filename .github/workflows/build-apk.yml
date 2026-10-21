@@ -14,7 +14,6 @@ jobs:
 
       - name: Unzip and Move Project Files
         run: |
-          # البحث عن ملف الـ ZIP وفك الضغط في مجلد مؤقت
           ZIP_FILE=$(find .github/workflows -name "*.zip" | head -n 1)
           if [ -z "$ZIP_FILE" ]; then
             echo "Error: ZIP file not found!"
@@ -22,17 +21,12 @@ jobs:
           fi
           echo "Found ZIP: $ZIP_FILE"
           unzip -o "$ZIP_FILE" -d temp_extract
-
-          # البحث عن مجلد المشروع ونقل محتوياته للجذر الرئيسي
           PROJECT_DIR=$(find temp_extract -maxdepth 2 -name "build.gradle.kts" -not -path "*/src/*" | head -n 1 | xargs -r dirname)
-          
           if [ -n "$PROJECT_DIR" ] && [ "$PROJECT_DIR" != "." ]; then
             echo "Moving files from $PROJECT_DIR to root..."
             mv "$PROJECT_DIR"/* .
             mv "$PROJECT_DIR"/.[!.]* . 2>/dev/null || true
           fi
-          
-          # تنظيف الملفات المؤقتة
           rm -rf temp_extract
 
       - name: Set up JDK 17
@@ -43,18 +37,15 @@ jobs:
 
       - name: Setup Android SDK (Direct Command)
         run: |
-          # استخدام بيئة الأندرويد المدمجة في جيت هاب
           export ANDROID_HOME=$ANDROID_SDK_ROOT
           export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools
-
-          # قبول التراخيص وتثبيت الحزم المطلوبة
           yes | sdkmanager --licenses > /dev/null 2>&1 || true
           sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0" > /dev/null 2>&1 || true
 
-      - name: Generate Gradle Wrapper (Since it's missing in ZIP)
+      # التعديل الحاسم: إنشاء Gradle Wrapper بالإصدار 8.7 المتوافق مع Kotlin 1.9.22
+      - name: Generate Gradle Wrapper with Gradle 8.7
         run: |
-          # بما أن ملف gradlew غير موجود في الـ ZIP، سنقوم بإنشائه
-          gradle wrapper --gradle-version 8.5
+          gradle wrapper --gradle-version 8.7
           chmod +x gradlew
 
       - name: Build Debug APK
@@ -65,4 +56,3 @@ jobs:
         with:
           name: Athkari-APK
           path: app/build/outputs/apk/debug/app-debug.apk
-
